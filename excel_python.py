@@ -143,7 +143,7 @@ def groupe(excel_file_encombrement_path, column_name_encombrement):
         f.write(csv_data)
 
 
-def groupe_element(excel_file_group_path):
+def groupe_element(excel_file_group_path, excel_file_cooling_path):
     """
     Fonction qui créer un fichier GROUPE_ELEM_CSV.csv à partir du fichier CAT_GROUPE.xlsx
     Le nouveau fichier CSV contiendra des données selon des entêtes spécifiques du fichier initial
@@ -152,13 +152,11 @@ def groupe_element(excel_file_group_path):
     #Colonnes que l'on souhaite traiter 
     column_name_groupe_moteur = ["IDENT\nItem",'ID_MOT\nEngine type']
     colomn_name_groupe_alternateur = ["IDENT\nItem","ID_ALT\nAlternator type"]
-    colomn_name_groupe_radiateur = ["IDENT\nItem","ID_REFROID\nType of Cooling"]
+    colomn_name_groupe_radiateur = ["IDENT\nItem", "REF_REFROID\nCooling part number"]
     colomn_name_groupe_pupitre = ["IDENT\nItem"]
 
-    #Lecture du fichier pour le moteur 
+    #Séléction des colonnes que l'on souhaite traiter
     dfg = pd.read_excel(excel_file_group_path)
-
-    #Séléction des colonnes que l'on souhaite traiter 
     df1 = dfg[column_name_groupe_moteur]
     df1.rename(columns={'IDENT\nItem': 'ID', 'ID_MOT\nEngine type': 'element'}, inplace=True)
     
@@ -167,11 +165,18 @@ def groupe_element(excel_file_group_path):
     df2 = dfa[colomn_name_groupe_alternateur]
     df2.rename(columns={'IDENT\nItem': 'ID', 'ID_ALT\nAlternator type': 'element'}, inplace=True)
     
-    
     #Pour le radiateur
     dfr = pd.read_excel(excel_file_group_path)
-    df3 = dfr[colomn_name_groupe_radiateur]
-    df3.rename(columns={'IDENT\nItem': 'ID', "ID_REFROID\nType of Cooling": 'element'}, inplace=True)
+    dfc = pd.read_excel(excel_file_cooling_path)
+    
+    # Suppression des lignes où la colonne "ID_STATUT\nStatus" a une valeur différente de 'ACTIF'
+    dfc = dfc[dfc['ID_STATUT\nStatus'] == 'ACTIF']
+    
+    # Fusionner les deux dataframes en utilisant les colonnes "DESC_GEN\nDescription" et "IDENT_GE\nGenset model" comme colonnes communes
+    merged_df = pd.merge(dfr, dfc, left_on='DESC_GEN\nDescription', right_on='IDENT_GE\nGenset model')
+           
+    df3 = merged_df[colomn_name_groupe_radiateur]
+    df3.rename(columns={'IDENT\nItem': 'ID', "REF_REFROID\nCooling part number": 'element'}, inplace=True)
     
     #Pour le pupitre
     dfr = pd.read_excel(excel_file_group_path)
@@ -247,7 +252,7 @@ def main():
     alternateur(excel_file_alternator_path)
     radiateur(excel_file_cooling_path, column_name_cooling)
     groupe(excel_file_encombrement_path, column_name_encombrement)
-    groupe_element(excel_file_group_path)
+    groupe_element(excel_file_group_path, excel_file_cooling_path)
     
     #chemin du fichier MOTEUR_CSV.csv
     CSV_file_motor_path = "C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/MOTEUR_CSV.csv"
