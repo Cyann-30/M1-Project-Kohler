@@ -105,7 +105,7 @@ def radiateur(excel_file_cooling_path, column_name_cooling):
     #ajout des colonnes conso et type 
     df['conso'] = 0
     df['type'] = 'radiateur'
-    #df = df.drop("ID_REFROID\nType of Cooling", axis=1)
+    df = df.drop_duplicates("REF_REFROID\nCooling part number")
     #df = df.drop("ENC_TYPE\nEnclosure", axis=1)
 
     #Conversion des données au format CSV 
@@ -113,6 +113,70 @@ def radiateur(excel_file_cooling_path, column_name_cooling):
 
     #Enregistrement des données dans le fichier CSV RADIATEUR_CSV.csv
     with open("C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/RADIATEUR_CSV.csv","w") as f:
+        f.write(csv_data)
+
+
+def capot(excel_file_capot_path):
+    
+    #Colonnes que l'on souhaite traiter 
+    column_name_radiator = ["IDENT\nItem","ID_STATUT\nStatus","ENC_TYPE\nEnclosure","GEN_ORD\nOrder Number","ENC_PDSBRT_IN\nGross weight (kg)"]
+
+    #Lecture du fichier
+    dfg = pd.read_excel(excel_file_capot_path)
+
+    #Séléction des colonnes que l'on souhaite traiter 
+    df = dfg[column_name_radiator]
+    df.rename(columns={'IDENT\nItem': 'ID', 'ID_STATUT\nStatus': 'Status','ENC_PDSBRT_IN\nGross weight (kg)': 'pds','ENC_TYPE\nEnclosure' : 'capot',"GEN_ORD\nOrder Number":'nb'}, inplace=True)
+    i=0
+    while i<=(len(dfg)-1):
+        if df["Status"][i] != "ACTIF":
+            df = df.drop(labels=i,axis=0)
+        i+=1
+        
+    df_filtre = df[~df['capot'].str.contains('DW')]
+    df_filtre = df_filtre.reset_index(drop=True)
+    liste_nom_capot = []
+    liste_poids_capot = []
+    j=0
+    while j<len(df_filtre):
+        
+        if df_filtre['nb'][j] == 2.0 and df_filtre['nb'][j+1] == 1.0:
+            liste_nom_capot.append(df_filtre['capot'][j])
+            liste_poids_capot.append(df_filtre['pds'][j]-df_filtre['pds'][j+1])
+
+        if df_filtre['nb'][j] == 2.0 and df_filtre['nb'][j+1] != 1.0:
+            if df_filtre['nb'][j+2] == 1.0:
+               liste_nom_capot.append(df_filtre['capot'][j])
+               liste_poids_capot.append(df_filtre['pds'][j]-df_filtre['pds'][j+2])
+        j+=1
+        
+    dataframe = pd.DataFrame({'id': liste_nom_capot, 'poids': liste_poids_capot})
+
+    status = []
+    element = 'ACTIF' 
+    for i in range(len(dataframe)):
+        status.append(element)
+        
+    conso = []
+    cons = 0 
+    for i in range(len(dataframe)):
+        conso.append(cons)
+        
+    typ = []
+    ty = 'capot'
+    for i in range(len(dataframe)):
+        typ.append(ty)
+    
+    dataframe.insert(loc=1, column='Status', value=status)
+    dataframe = dataframe.assign(conso=conso)
+    dataframe = dataframe.assign(type=typ)
+    dataframe = dataframe.drop_duplicates('id')
+    
+    #Conversion des données au format CSV 
+    csv_data = dataframe.to_csv(header=False, index=False)
+
+    #Enregistrement des données CSV dans un fichier
+    with open("C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/CAPOT_CSV.csv","w") as f:
         f.write(csv_data)
 
 
@@ -177,6 +241,7 @@ def groupe_element(excel_file_group_path, excel_file_cooling_path):
            
     df3 = merged_df[colomn_name_groupe_radiateur]
     df3.rename(columns={'IDENT\nItem': 'ID', "REF_REFROID\nCooling part number": 'element'}, inplace=True)
+    df3 = df3.drop_duplicates()
     
     #Pour le pupitre
     dfr = pd.read_excel(excel_file_group_path)
@@ -200,6 +265,9 @@ def groupe_element(excel_file_group_path, excel_file_cooling_path):
     
     nouvelle_dataframe =  pd.concat([df1, df2, df3, df4, df5])
     
+    # inversion des données dans chaque ligne
+    nouvelle_dataframe = nouvelle_dataframe.apply(lambda x: x[::-1], axis=1)
+    
     #Conversion des données au format CSV 
     csv_data = nouvelle_dataframe.to_csv(header=False, index=False)
 
@@ -208,39 +276,58 @@ def groupe_element(excel_file_group_path, excel_file_cooling_path):
         f.write(csv_data)
 
 
-def element_matiere(CSV_file_motor_path):
-    """
-    Fonction qui créer un fichier ELEMENTS_MATIERES.csv à partir du fichier CSV MOTEUR_CSV.csv
-    Le nouveau fichier CSV contiendra chaque moteur ainsi que chacune des 4 matières
-    Prend en paramètre le chemin du fichier CSV
-    """
+def element_matiere(CSV_file_motor_path, CSV_file_alternator_path, CSV_file_radiator_path, CSV_file_capot_path):
+    
     #Lecture du fichier CSV
-    data_frame = pd.read_csv(CSV_file_motor_path, header=None)
+    data_frame_motor = pd.read_csv(CSV_file_motor_path, header=None)
+    data_frame_alt = pd.read_csv(CSV_file_alternator_path, header=None)
+    data_frame_radiator = pd.read_csv(CSV_file_radiator_path, header=None)
+    data_frame_capot = pd.read_csv(CSV_file_capot_path, header=None)
     
-    #Recuperation de la colonne des identifiants
-    donnees_colonnes = data_frame.iloc[:, 0].tolist()
-    
-    #création de listes
-    lst_elements = [x for x in donnees_colonnes for _ in range(4)]
+    lst_df = [data_frame_motor, data_frame_alt, data_frame_radiator, data_frame_capot]
+    mes_variables = {}
     matieres = ['acier','aluminium','cuivre','plastique']
-    lst_matieres = []
     
-    #Ajout des 4 matieres pour chaque element
-    i = 0
-    for i in range(int(len(lst_elements)/4)):
-        lst_matieres += matieres
+    for i, element in enumerate(lst_df):
+        nom_variable_1 = f"donnees_colonnes_{i}"
+        mes_variables[nom_variable_1] = element.iloc[:, 0].tolist()
+        nom_variable_2 = f"lst_{i}"
+        mes_variables[nom_variable_2] = [x for x in mes_variables[nom_variable_1] for _ in range(4)]
+        nom_variable_3 = f"lst_matieres_{i}"
+        mes_variables[nom_variable_3] = []
+        
+        #Ajout des 4 matieres pour chaque element
+        for j in range(len(mes_variables[nom_variable_1])):
+            mes_variables[nom_variable_3] += matieres
+        
+        #Création d'une dataframe
+        nom_variable_4 = f"elem_mat_{i}"
+        mes_variables[nom_variable_4] = {'elements' : nom_variable_2, 'matieres' : nom_variable_3}
+        nom_variable_4 = f"frame_elem_mat_{i}"
+        mes_variables[nom_variable_4] = pd.DataFrame({'elements': mes_variables[nom_variable_2], 'matieres': mes_variables[nom_variable_3]})
     
-    #Création d'une dataframe 
-    elem_mat = {'elements' : lst_elements, 'matieres' : lst_matieres}
-    frame_elem_mat = pd.DataFrame(elem_mat)
-    
-    #Conversion des données au format CSV 
-    csv_data = frame_elem_mat.to_csv(header=False, index=False)
+    dataframe_elem_matiere = pd.concat([mes_variables['frame_elem_mat_0'], mes_variables['frame_elem_mat_1'], mes_variables['frame_elem_mat_2'], mes_variables['frame_elem_mat_3']])
 
-    #Enregistrement des données dans le fichier CSV ELEMENTS_MATIERES.csv
+
+    #Conversion des données au format CSV 
+    csv_data = dataframe_elem_matiere.to_csv(header=False, index=False)
+
+    #Enregistrement des données CSV dans un fichier
     with open("C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/ELEMENTS_MATIERES.csv","w") as f:
         f.write(csv_data)
 
+        
+def type_element():
+    """
+    Fonction qui créer un fichier CSV TYPE.csv
+    Le fichier CSV contiendra les 6 éléments qui composent un GE
+    """
+    #création d'un DataFrame avec une seule colonne de données
+    df = pd.DataFrame({'Colonne': ['alternateur', 'capot', 'chassis', 'moteur', 'pupitre', 'radiateur']})
+
+    #écriture du DataFrame dans un fichier CSV
+    df.to_csv("C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/TYPE.csv", header=False, index=False)
+    
 
 def main():
     """
@@ -253,11 +340,17 @@ def main():
     radiateur(excel_file_cooling_path, column_name_cooling)
     groupe(excel_file_encombrement_path, column_name_encombrement)
     groupe_element(excel_file_group_path, excel_file_cooling_path)
+    capot(excel_file_encombrement_path)
     
-    #chemin du fichier MOTEUR_CSV.csv
+    #chemin des fichiers CSV
     CSV_file_motor_path = "C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/MOTEUR_CSV.csv"
-    #Appel de la fonction
-    element_matiere(CSV_file_motor_path)
+    CSV_file_alternator_path = "C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/ALTERNATEUR_CSV.csv"
+    CSV_file_radiator_path = "C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/RADIATEUR_CSV.csv"
+    CSV_file_capot_path = "C:/Users/Cyann/Documents/ISEN/M1/Projet M1/SOURCES_KOHLER/CSV/CAPOT_CSV.csv"
+    
+    #Appel des fonctions
+    element_matiere(CSV_file_motor_path, CSV_file_alternator_path, CSV_file_radiator_path, CSV_file_capot_path)
+    type_element()
 
 
 # Programe principal
